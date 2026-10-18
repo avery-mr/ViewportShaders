@@ -7,6 +7,7 @@
 #include <Graphics/TextureHandleUtility.h>
 #include "dbgprint.h"
 #include "resource.h"
+#include "FormClayOverride.h"
 
 #include <algorithm>
 #include <vector>
@@ -396,6 +397,7 @@ class FormClayDlgProc : public ParamMap2UserDlgProc
     HWND mHwnd = nullptr;
     IParamMap2* mMap = nullptr;
     bool mFilling = false;
+    std::vector<HWND> mDialogs;
     std::vector<MatcapPreset> mPresets;
 
     void Fill(IParamBlock2* pb, TimeValue t)
@@ -500,9 +502,24 @@ public:
         case WM_INITDIALOG:
             mHwnd = hWnd;
             mMap = map;
+            if (std::find(mDialogs.begin(), mDialogs.end(), hWnd) == mDialogs.end())
+                mDialogs.push_back(hWnd);
             Fill(map ? map->GetParamBlock() : nullptr, t);
+            RefreshOverride();
             return TRUE;
+        case WM_DESTROY:
+            mDialogs.erase(std::remove(mDialogs.begin(), mDialogs.end(), hWnd), mDialogs.end());
+            if (mHwnd == hWnd)
+                mHwnd = mDialogs.empty() ? nullptr : mDialogs.back();
+            return FALSE;
         case WM_COMMAND:
+            if (LOWORD(wParam) == IDC_VIEWPORT_OVERRIDE && HIWORD(wParam) == BN_CLICKED) {
+                const bool on = IsDlgButtonChecked(hWnd, IDC_VIEWPORT_OVERRIDE) == BST_CHECKED;
+                IParamBlock2* pb = map ? map->GetParamBlock() : nullptr;
+                Mtl* source = pb ? dynamic_cast<Mtl*>(pb->GetOwner()) : nullptr;
+                FormClaySetViewportOverride(on, source);
+                RefreshOverride();
+            }
             if (!mFilling && LOWORD(wParam) == IDC_MATCAP_PRESET && HIWORD(wParam) == CBN_SELCHANGE)
                 Apply(map, t);
             return FALSE;
@@ -517,9 +534,27 @@ public:
     }
 
     void DeleteThis() override {}
+
+    void RefreshOverride()
+    {
+        const UINT state = FormClayViewportOverrideEnabled() ? BST_CHECKED : BST_UNCHECKED;
+        for (auto it = mDialogs.begin(); it != mDialogs.end(); ) {
+            if (!IsWindow(*it)) {
+                it = mDialogs.erase(it);
+                continue;
+            }
+            CheckDlgButton(*it, IDC_VIEWPORT_OVERRIDE, state);
+            ++it;
+        }
+    }
 };
 
 static FormClayDlgProc gFormClayDlgProc;
+
+void RefreshFormClayOverrideCheckbox()
+{
+    gFormClayDlgProc.RefreshOverride();
+}
 
 // Registered with the class descriptor at startup, so this stays below GetFormClayDesc.
 // clay_color stays 0: scenes store the parameter id.

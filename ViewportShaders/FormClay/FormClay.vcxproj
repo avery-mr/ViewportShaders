@@ -62,6 +62,7 @@
   <ItemGroup>
     <ClCompile Include="DllEntry.cpp" />
     <ClCompile Include="FormClayMtl.cpp" />
+    <ClCompile Include="FormClayOverride.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="FormClay.def" />
@@ -72,6 +73,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
+    <ClInclude Include="FormClayOverride.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

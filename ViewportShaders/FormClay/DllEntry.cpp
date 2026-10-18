@@ -35,6 +35,14 @@ __declspec(dllexport) ULONG LibVersion()
 }
 
 extern ClassDesc2* GetFormClayDesc();
+void FormClayShutdownViewportOverride();
+
+__declspec(dllexport) int LibShutdown()
+{
+	FormClayShutdownViewportOverride();
+	return TRUE;
+}
+
 __declspec(dllexport) ClassDesc* LibClassDesc(int i)
 {
 	switch (i)
