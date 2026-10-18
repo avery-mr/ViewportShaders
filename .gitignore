@@ -1,0 +1,23 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Compiler and linker output
+obj/
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.exp
+*.lib
+*.iobj
+*.ipdb
+*.ipch
+*.tlog
+*.recipe
+*.log
+*.res
+
+# Plug-in output. FormClay.fx next to the DLL is a copy of ViewportShaders/FormClay/FormClay.fx.
+ViewportShaders/plugins/

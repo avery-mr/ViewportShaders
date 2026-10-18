@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Hybrid|x64">
+      <Configuration>Hybrid</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>18.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{c2d222ef-5104-4d9c-b995-91ceb92d75f9}</ProjectGuid>
+    <RootNamespace>FormClay</RootNamespace>
+    <MaxSDK>C:\Program Files\Autodesk\3ds Max 2027 SDK\maxsdk</MaxSDK>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="$(MaxSDK)\ProjectSettings\propertySheets\3dsmax.general.project.settings.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Hybrid|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(MaxSDK)\ProjectSettings\propertySheets\3dsmax.cpp.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <OutDir>$(ProjectDir)..\plugins\</OutDir>
+    <IntDir>$(ProjectDir)..\obj\$(Platform)\$(Configuration)\</IntDir>
+    <TargetName>FormClay</TargetName>
+    <TargetExt>.dlu</TargetExt>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(MaxSdkInc);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalLibraryDirectories>$(MaxSdkDir)lib\$(Platform)\Release\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>core.lib;geom.lib;graphicsDriver.lib;MaxGraphicsObjects.lib;maxutil.lib;paramblk2.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <StripPrivateSymbols>
+      </StripPrivateSymbols>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <ModuleDefinitionFile Condition="'$(Configuration)|$(Platform)'=='Hybrid|x64'">FormClay.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">FormClay.def</ModuleDefinitionFile>
+    </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(ProjectDir)FormClay.fx" "$(OutDir)" &amp;&amp; if not exist "$(OutDir)matcaps" mkdir "$(OutDir)matcaps" &amp;&amp; xcopy /Y /I /Q "$(ProjectDir)..\..\matcaps\*.*" "$(OutDir)matcaps\"</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="DllEntry.cpp" />
+    <ClCompile Include="FormClayMtl.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="FormClay.def" />
+    <None Include="FormClay.fx" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="FormClay.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

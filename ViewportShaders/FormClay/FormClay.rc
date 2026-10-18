@@ -1,0 +1,39 @@
+#include "resource.h"
+#include "windows.h"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+IDD_FORMCLAY DIALOG DISCARDABLE 0, 0, 216, 152
+STYLE WS_CHILD | WS_VISIBLE
+FONT 8, "Microsoft Sans Serif"
+BEGIN
+    LTEXT           "Clay Color", -1, 8, 12, 48, 8
+    CONTROL         "", IDC_CLAY_COLOR, "ColorSwatch", WS_TABSTOP, 64, 8, 40, 14
+    LTEXT           "Wrap", -1, 8, 34, 48, 8
+    CONTROL         "", IDC_WRAP_EDIT, "CustEdit", WS_TABSTOP, 64, 32, 36, 10
+    CONTROL         "", IDC_WRAP_SPIN, "SpinnerControl", 0x0, 102, 32, 8, 10
+    LTEXT           "Cavity", -1, 8, 54, 48, 8
+    CONTROL         "", IDC_CAVITY_EDIT, "CustEdit", WS_TABSTOP, 64, 52, 36, 10
+    CONTROL         "", IDC_CAVITY_SPIN, "SpinnerControl", 0x0, 102, 52, 8, 10
+    LTEXT           "Edge", -1, 8, 74, 48, 8
+    CONTROL         "", IDC_EDGE_EDIT, "CustEdit", WS_TABSTOP, 64, 72, 36, 10
+    CONTROL         "", IDC_EDGE_SPIN, "SpinnerControl", 0x0, 102, 72, 8, 10
+    LTEXT           "Preset", -1, 8, 94, 48, 8
+    COMBOBOX        IDC_MATCAP_PRESET, 64, 92, 140, 80, CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Matcap", -1, 8, 114, 48, 8
+    CONTROL         "None", IDC_MATCAP, "CustButton", WS_TABSTOP, 64, 112, 100, 14
+    LTEXT           "Strength", -1, 8, 134, 48, 8
+    CONTROL         "", IDC_MATCAP_STR_EDIT, "CustEdit", WS_TABSTOP, 64, 132, 36, 10
+    CONTROL         "", IDC_MATCAP_STR_SPIN, "SpinnerControl", 0x0, 102, 132, 8, 10
+END
+
+STRINGTABLE
+BEGIN
+    IDS_FORMCLAY_PARAMS "Parameters"
+    IDS_CLAY_COLOR      "Clay Color"
+    IDS_WRAP            "Wrap"
+    IDS_CAVITY          "Cavity"
+    IDS_EDGE            "Edge"
+    IDS_MATCAP          "Matcap"
+    IDS_MATCAP_STRENGTH "Matcap Strength"
+END

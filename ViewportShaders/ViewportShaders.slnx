@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Hybrid" />
+    <BuildType Name="Release" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="FormClay/FormClay.vcxproj" Id="c2d222ef-5104-4d9c-b995-91ceb92d75f9" />
+</Solution>
