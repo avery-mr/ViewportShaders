@@ -21,7 +21,7 @@ extern HINSTANCE hInstance;
 ClassDesc2* GetFormClayDesc();
 
 enum { formclay_params };
-enum { clay_color, wrap_amount, cavity_amount, edge_amount, matcap_map, matcap_strength };
+enum { clay_color, wrap_amount, cavity_amount, edge_amount, matcap_map, matcap_strength, matcap_preset, use_custom_matcap };
 static const int kRefPblock = 0;
 
 // The effect and the shipped matcaps sit beside the DLL.
@@ -53,6 +53,7 @@ class FormClayMtl : public Mtl, public MaxSDK::Graphics::IHLSLMaterialTranslator
     MaxSDK::Graphics::TextureHandle mMatcap;
     MaxSDK::Graphics::TextureHandle mNoMatcap;
     Texmap* mMatcapSource;
+    BitmapTex* mPresetLoader;
     MSTR mMatcapFile;
     MSTR mShaderError;
     bool mShaderLoaded;
@@ -124,36 +125,97 @@ class FormClayMtl : public Mtl, public MaxSDK::Graphics::IHLSLMaterialTranslator
         }
     }
 
-    // A Bitmap with a file is the only map the effect samples. Anything else leaves the clay alone.
+    void ReleasePresetLoader()
+    {
+        if (!mPresetLoader)
+            return;
+        mPresetLoader->DeleteThis();
+        mPresetLoader = nullptr;
+    }
+
+    void BindMatcap(MaxSDK::Graphics::HLSLMaterialHandle& handle, bool ready)
+    {
+        handle.SetBoolParameter(_M("UseMatcap"), ready ? TRUE : FALSE);
+        handle.SetTextureParameter(_M("MatcapTex"), (ready && mMatcap.IsValid()) ? mMatcap : mNoMatcap);
+    }
+
+    // Preset files are read from disk. Formats the texture handle cannot open go through a
+    // Bitmap that is never assigned to the material, so the Slate graph stays empty.
+    MaxSDK::Graphics::TextureHandle LoadMatcapFile(const MSTR& path, TimeValue t)
+    {
+        MaxSDK::Graphics::TextureHandle fromFile;
+        if (fromFile.Initialize(path)) {
+            ReleasePresetLoader();
+            return fromFile;
+        }
+
+        ReleasePresetLoader();
+        mPresetLoader = NewDefaultBitmapTex();
+        if (!mPresetLoader)
+            return fromFile;
+        mPresetLoader->SetMapName(path);
+        return MaxSDK::Graphics::TextureHandleUtility::CreateTextureHandle(mPresetLoader, t);
+    }
+
+    bool UseCustomMatcap(TimeValue t) const
+    {
+        return pblock && pblock->GetInt(use_custom_matcap, t) != 0;
+    }
+
+    MSTR PresetPath(TimeValue t) const
+    {
+        const MCHAR* name = pblock ? pblock->GetStr(matcap_preset, t) : nullptr;
+        if (!name || name[0] == 0)
+            return MSTR();
+        const MCHAR* slash = _tcsrchr(name, _T('\\'));
+        return MatcapDirectory() + (slash ? slash + 1 : name);
+    }
+
+    // Custom map uses the Bitmap slot. Otherwise the preset name is a file beside the DLL.
     bool PrepareMatcap(TimeValue t, MaxSDK::Graphics::HLSLMaterialHandle& handle)
     {
         EnsureNoMatcap();
+        if (!UseCustomMatcap(t)) {
+            const MSTR path = PresetPath(t);
+            if (path.Length() == 0) {
+                mMatcapSource = nullptr;
+                mMatcapFile = MSTR();
+                mMatcapDirty = false;
+                ReleasePresetLoader();
+                BindMatcap(handle, false);
+                return true;
+            }
+            if (mMatcapDirty || mMatcapSource != nullptr || mMatcapFile != path) {
+                mMatcap = LoadMatcapFile(path, t);
+                mMatcapSource = nullptr;
+                mMatcapFile = path;
+                mMatcapDirty = false;
+            }
+            BindMatcap(handle, mMatcap.IsValid());
+            return true;
+        }
+
+        ReleasePresetLoader();
         Texmap* map = pblock ? pblock->GetTexmap(matcap_map, t) : nullptr;
         BitmapTex* bitmap = map ? GetIBitmapTextInterface(map) : nullptr;
         const MCHAR* file = (bitmap && bitmap->GetMapName()) ? bitmap->GetMapName() : _T("");
 
-        if (!bitmap || file[0] == 0)
-        {
+        if (!bitmap || file[0] == 0) {
             mMatcapSource = nullptr;
             mMatcapFile = MSTR();
             mMatcapDirty = false;
-            handle.SetBoolParameter(_M("UseMatcap"), FALSE);
-            if (mNoMatcap.IsValid())
-                handle.SetTextureParameter(_M("MatcapTex"), mNoMatcap);
+            BindMatcap(handle, false);
             return true;
         }
 
-        if (mMatcapDirty || mMatcapSource != bitmap || mMatcapFile != file)
-        {
+        if (mMatcapDirty || mMatcapSource != bitmap || mMatcapFile != file) {
             mMatcap = MaxSDK::Graphics::TextureHandleUtility::CreateTextureHandle(bitmap, t);
             mMatcapSource = bitmap;
             mMatcapFile = file;
             mMatcapDirty = false;
         }
 
-        const bool ready = mMatcap.IsValid();
-        handle.SetBoolParameter(_M("UseMatcap"), ready ? TRUE : FALSE);
-        handle.SetTextureParameter(_M("MatcapTex"), ready ? mMatcap : mNoMatcap);
+        BindMatcap(handle, mMatcap.IsValid());
         return true;
     }
 
@@ -161,6 +223,7 @@ public:
     FormClayMtl(BOOL loading)
         : pblock(nullptr)
         , mMatcapSource(nullptr)
+        , mPresetLoader(nullptr)
         , mShaderLoaded(false)
         , mMatcapDirty(true)
     {
@@ -169,6 +232,11 @@ public:
         // A scene load installs the saved block itself. Building another would leak.
         if (!loading)
             Reset();
+    }
+
+    ~FormClayMtl()
+    {
+        ReleasePresetLoader();
     }
 
     Class_ID ClassID() override { return FORMCLAY_CLASS_ID; }
@@ -191,8 +259,11 @@ public:
     RefResult NotifyRefChanged(const Interval& /*changeInt*/, RefTargetHandle hTarget,
         PartID& /*partID*/, RefMessage message, BOOL /*propagate*/) override
     {
-        if (message == REFMSG_CHANGE && hTarget == pblock && pblock->LastNotifyParamID() == matcap_map)
-            mMatcapDirty = true;
+        if (message == REFMSG_CHANGE && hTarget == pblock) {
+            const ParamID id = pblock->LastNotifyParamID();
+            if (id == matcap_map || id == matcap_preset || id == use_custom_matcap)
+                mMatcapDirty = true;
+        }
         return REF_SUCCEED;
     }
 
@@ -356,11 +427,10 @@ ClassDesc2* GetFormClayDesc()
     return &gFormClayDesc;
 }
 
-// The preset list is not a saved parameter. It writes the Matcap Bitmap slot.
+// The dropdown writes the preset file name. It does not create a Bitmap.
 struct MatcapPreset
 {
-    bool custom = false;
-    MSTR path;
+    MSTR file;
 };
 
 static bool IsMatcapFile(const MCHAR* name)
@@ -381,15 +451,12 @@ static bool IsMatcapFile(const MCHAR* name)
     return false;
 }
 
-static bool SameMatcapFile(const MCHAR* assigned, const MSTR& preset)
+static const MCHAR* FileNameOf(const MCHAR* path)
 {
-    if (_tcsicmp(assigned, preset) == 0)
-        return true;
-    const MCHAR* assignedName = _tcsrchr(assigned, _T('\\'));
-    const MCHAR* presetName = _tcsrchr(preset.data(), _T('\\'));
-    assignedName = assignedName ? assignedName + 1 : assigned;
-    presetName = presetName ? presetName + 1 : preset.data();
-    return _tcsicmp(assignedName, presetName) == 0;
+    if (!path)
+        return _T("");
+    const MCHAR* slash = _tcsrchr(path, _T('\\'));
+    return slash ? slash + 1 : path;
 }
 
 class FormClayDlgProc : public ParamMap2UserDlgProc
@@ -429,45 +496,57 @@ class FormClayDlgProc : public ParamMap2UserDlgProc
         });
 
         const MCHAR* assigned = _T("");
-        Texmap* map = pb ? pb->GetTexmap(matcap_map, t) : nullptr;
-        BitmapTex* bitmap = map ? GetIBitmapTextInterface(map) : nullptr;
-        if (bitmap && bitmap->GetMapName())
-            assigned = bitmap->GetMapName();
+        if (pb) {
+            const MCHAR* stored = pb->GetStr(matcap_preset, t);
+            if (stored)
+                assigned = FileNameOf(stored);
+        }
 
         int matched = -1;
         for (int i = 0; i < static_cast<int>(files.size()); ++i)
         {
-            if (assigned[0] && SameMatcapFile(assigned, files[i]))
+            if (assigned[0] && _tcsicmp(assigned, FileNameOf(files[i])) == 0)
                 matched = i;
         }
 
         HWND combo = GetDlgItem(mHwnd, IDC_MATCAP_PRESET);
         SendMessage(combo, CB_RESETCONTENT, 0, 0);
 
+        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)_T("None"));
+        mPresets.push_back({ MSTR() });
         int selection = 0;
+
         if (assigned[0] && matched < 0)
         {
-            SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)_T("Custom"));
-            mPresets.push_back({ true, MSTR() });
-            selection = 0;
-        }
-        SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)_T("None"));
-        mPresets.push_back({ false, MSTR() });
-        if (!(assigned[0] && matched < 0))
+            SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)assigned);
+            mPresets.push_back({ MSTR(assigned) });
             selection = static_cast<int>(mPresets.size()) - 1;
+        }
 
         for (int i = 0; i < static_cast<int>(files.size()); ++i)
         {
-            const MCHAR* slash = _tcsrchr(files[i].data(), _T('\\'));
-            const MCHAR* label = slash ? slash + 1 : files[i].data();
+            const MCHAR* label = FileNameOf(files[i]);
             SendMessage(combo, CB_ADDSTRING, 0, (LPARAM)label);
-            mPresets.push_back({ false, files[i] });
+            mPresets.push_back({ MSTR(label) });
             if (i == matched)
                 selection = static_cast<int>(mPresets.size()) - 1;
         }
 
         SendMessage(combo, CB_SETCURSEL, selection, 0);
+        EnableMatcapSources(pb, t);
         mFilling = false;
+    }
+
+    void EnableMatcapSources(IParamBlock2* pb, TimeValue t)
+    {
+        const bool custom = pb && pb->GetInt(use_custom_matcap, t) != 0;
+        EnableWindow(GetDlgItem(mHwnd, IDC_MATCAP_PRESET), custom ? FALSE : TRUE);
+        if (HWND button = GetDlgItem(mHwnd, IDC_MATCAP)) {
+            if (ICustButton* cust = GetICustButton(button)) {
+                cust->Enable(custom ? TRUE : FALSE);
+                ReleaseICustButton(cust);
+            }
+        }
     }
 
     void Apply(IParamMap2* map, TimeValue t)
@@ -476,22 +555,12 @@ class FormClayDlgProc : public ParamMap2UserDlgProc
         const int sel = static_cast<int>(SendMessage(combo, CB_GETCURSEL, 0, 0));
         if (sel < 0 || sel >= static_cast<int>(mPresets.size()))
             return;
-        const MatcapPreset& preset = mPresets[sel];
-        if (preset.custom)
-            return;
 
         IParamBlock2* pb = map ? map->GetParamBlock() : nullptr;
         if (!pb)
             return;
-        if (preset.path.Length() == 0)
-        {
-            pb->SetValue(matcap_map, t, static_cast<Texmap*>(nullptr));
-            return;
-        }
-
-        BitmapTex* bitmap = NewDefaultBitmapTex();
-        bitmap->SetMapName(preset.path);
-        pb->SetValue(matcap_map, t, static_cast<Texmap*>(bitmap));
+        const MCHAR* name = mPresets[sel].file.Length() > 0 ? mPresets[sel].file.data() : _T("");
+        pb->SetValue(matcap_preset, t, name);
     }
 
 public:
@@ -595,5 +664,14 @@ static ParamBlockDesc2 formclay_param_blk(
         p_range, 0.0f, 1.0f,
         p_ui, TYPE_SPINNER, EDITTYPE_FLOAT, IDC_MATCAP_STR_EDIT, IDC_MATCAP_STR_SPIN, 0.01f,
         p_nonLocalizedName, _T("Matcap Strength"),
+        p_end,
+    matcap_preset, _T("matcapPreset"), TYPE_STRING, 0, IDS_MATCAP_PRESET,
+        p_default, _T(""),
+        p_nonLocalizedName, _T("Matcap Preset"),
+        p_end,
+    use_custom_matcap, _T("useCustomMatcap"), TYPE_BOOL, 0, IDS_USE_CUSTOM_MATCAP,
+        p_default, FALSE,
+        p_ui, TYPE_SINGLECHECKBOX, IDC_USE_CUSTOM_MATCAP,
+        p_nonLocalizedName, _T("Custom Map"),
         p_end,
     p_end);
